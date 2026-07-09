@@ -39,7 +39,13 @@ spec:
                 secretKeyRef:
                   name: bankapp-secrets
                   key: MYSQL_ROOT_PASSWORD
-
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500M"
           volumeMounts:
             - name: mysql-storage
               mountPath: /var/lib/mysql
