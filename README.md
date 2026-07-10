@@ -1,326 +1,307 @@
-<div align="center">
+# BankApp
 
-# DevSecOps Banking Application
+BankApp is a simple banking web application. You can create an account, log in, deposit money, withdraw money, transfer money, view transactions, and ask the built-in AI assistant questions about your account.
 
-A high-performance, containerized financial platform built with Spring Boot 3, Java 21, and integrated Contextual AI. This project implements a secure "DevSecOps Pipeline" using GitHub Actions, OIDC authentication, and AWS managed services.
+The AI assistant runs with **Ollama** and the **tinyllama** model. It is local to your machine or Kubernetes cluster, so you do not need an OpenAI key or any cloud AI account to try the app.
 
-[![Java Version](https://img.shields.io/badge/Java-21-blue.svg)](https://www.oracle.com/java/technologies/javase/jdk21-archive-downloads.html)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4.1-brightgreen.svg)](https://spring.io/projects/spring-boot)
-[![GitHub Actions](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-orange.svg)](.github/workflows/devsecops.yml)
-[![AWS OIDC](https://img.shields.io/badge/Security-OIDC-red.svg)](#phase-3-security-and-identity-configuration)
+## What You Will See
 
-</div>
+### Create Account
 
-![dashboard](screenshots/1.png)
+![Create account page](screenshots/register-page.png)
 
----
+### Dashboard
 
-## Technical Architecture
+![Dashboard page](screenshots/dashboard-page.png)
 
-The application is deployed across a multi-tier, segmented AWS environment. The control plane leverages GitHub Actions with integrated security gates at every stage.
+### AI Assistant
+
+![AI assistant on dashboard](screenshots/ai-assistant-page.png)
+
+## How The App Works
 
 ```mermaid
 graph TD
-    subgraph "External Control Plane"
-        GH[GitHub Actions]
-        User[User Browser]
+    User[Person using browser] -->|opens localhost:8080| BankApp[BankApp web app]
+    BankApp -->|stores accounts and transactions| MySQL[(MySQL database)]
+    BankApp -->|asks account questions| Ollama[Ollama AI server]
+    Ollama --> TinyLlama[tinyllama model]
+
+    subgraph Docker or Kubernetes
+        BankApp
+        MySQL
+        Ollama
+        TinyLlama
     end
-
-    subgraph "AWS Infrastructure (VPC)"
-        subgraph "Application Tier"
-            AppEC2[App EC2 - Ubuntu/Docker]
-            DB[(MySQL 8.0 Container)]
-        end
-
-        subgraph "Artificial Intelligence Tier"
-            Ollama[Ollama EC2 - AI Engine]
-        end
-
-        subgraph "Identity & Secrets"
-            Secrets[AWS Secrets Manager]
-            OIDC[IAM OIDC Provider]
-        end
-
-        subgraph "Registry"
-            ECR[Amazon ECR]
-        end
-    end
-
-    GH -->|1. OIDC Authentication| OIDC
-    GH -->|2. Push Scanned Image| ECR
-    GH -->|3. SSH Orchestration| AppEC2
-    GH -->|4. DAST Scan| AppEC2
-    
-    User -->|Port 8080| AppEC2
-    AppEC2 -->|JDBC Connection| DB
-    AppEC2 -->|REST Integration| Ollama
-    AppEC2 -->|Runtime Secrets| Secrets
-    AppEC2 -->|Pull Image| ECR
 ```
 
----
+## Easiest Way: Run With Docker
 
-## Security Pipeline (DevSecOps Pipeline)
+Use this if you just want the app running on your laptop.
 
-The CI/CD pipeline enforces **9 sequential security gates** before any code reaches production:
+### 1. Install Required Apps
 
-| Gate | Name | Tool | Purpose |
-| :---: | :--- | :--- | :--- |
-| 1 | Secret Scan | Gitleaks | Scans entire Git history for leaked secrets |
-| 2 | Lint | Checkstyle | Enforces Java Google-Style coding standards |
-| 3 | SAST | Semgrep | Scans Java source code for security flaws and OWASP Top 10 |
-| 4 | SCA | OWASP Dependency Check (first time run can take more than 30+ minutes) | Scans Maven dependencies for known CVEs |
-| 5 | Build | Maven | Compiles and packages the application |
-| 6 | Container Scan | Trivy | Scans the Docker image for OS and library vulnerabilities |
-| 7 | Push | Amazon ECR | Pushes the image only after Trivy passes |
-| 8 | Deploy | SSH / Docker Compose | Automated deployment to AWS EC2 |
-| 9 | DAST | OWASP ZAP | Dynamic attack surface scanning on live app |
+Install these first:
 
----
+- Docker Desktop or Docker Engine
+- Git
 
-## Technology Stack
+Check Docker is working:
 
-- **Backend Framework**: Java 21, Spring Boot 3.4.1
-- **Security Strategy**: Spring Security, IAM OIDC, Secrets Manager
-- **Persistence Layer**: MySQL 8.0 (Docker Container)
-- **AI Integration**: Ollama (TinyLlama)
-- **DevOps Tooling**: Docker, Docker Compose, GitHub Actions, AWS CLI, jq
-- **Infrastructure**: Amazon EC2, Amazon ECR, Amazon VPC
+```bash
+docker --version
+docker compose version
+```
 
----
+### 2. Start The App
 
-## Implementation Phases
+Open a terminal in this project folder and run:
 
-### Phase 1: AWS Infrastructure Initialization
+```bash
+docker compose up -d
+```
 
-1. **Container Registry (ECR)**:
+This starts three containers:
 
-   - Establish a private ECR repository named `devsecops-bankapp`.
+- `bankapp` - the website
+- `bankapp-mysql` - the database
+- `ollama` - the local AI server
 
-      ![ECR](screenshots/2.png)
+### 3. Download The AI Model
 
-2. **Application Server (EC2)**:
+Run this once after the containers start:
 
-   - Deploy an Ubuntu 22.04 instance with below `User Data`.
+```bash
+docker compose exec ollama ollama pull tinyllama
+```
 
-      ```bash
-      #!/bin/bash
+This may take a few minutes the first time.
 
-      sudo apt update 
-      sudo apt install -y docker.io docker-compose-v2 jq
-      sudo usermod -aG docker ubuntu
-      sudo newgrp docker
-      sudo snap install aws-cli --classic
-      ```
+### 4. Open The App
 
-   - Configure Security Group to open inbound rule for Port 22 (Management) and Port 8080 (Service).
+Open this in your browser:
 
-      > Better to give `name` to Security Group created.
+```text
+http://localhost:8080/register
+```
 
-   - Create an IAM Instance Profile(IAM EC2 role) containing permissions:
-     - `AmazonEC2ContainerRegistryPowerUser`
-     - `AWSSecretsManagerClientReadOnlyAccess`
+Create a new account, then log in. After login you can use:
 
-        ![Permissions](screenshots/3.png)
+- Dashboard: `http://localhost:8080/dashboard`
+- Transactions: `http://localhost:8080/transactions`
+- AI assistant: chat button on the dashboard
 
-   - Attach it to Application EC2. Select EC2 -> Actions -> Security -> Modify IAM role -> Attach created IAM role.
+### 5. Stop The App
 
-      ![IAM role](screenshots/4.png)
-   
-   - Connect to EC2 Instance and Run below command to check whether IAM role is working or not.
+```bash
+docker compose down
+```
 
-      ```bash
-      aws sts get-caller-identity
-      ```
+To remove saved database and AI data also:
 
-      You will get your account details with IAM role assumed.
+```bash
+docker compose down -v
+```
 
-3. **AI Engine Tier (Ollama)**:
-   - Deploy a dedicated Ubuntu EC2 instance.
-   - Open Inbound Port `11434` from the Application EC2 Security Group.
+## Run With Kubernetes
 
-      > Better to give `name` to Security Group created.
-    
-      ![ollama-sg](screenshots/8.png)
+Use this if you want to run the app like a small production system.
 
-   - Automate initialization using the [ollama-setup.sh](scripts/ollama-setup.sh) script via EC2 User Data.
-    
-      ![user-data](screenshots/9.png)
+### 1. Install Required Apps
 
-   - Verify the AI engine is responsive and the model is pulled in `AI engine EC2`:
+Install these first:
 
-     ```bash
-     ollama list
-     ```
+- Docker Desktop or Docker Engine
+- kubectl
+- kind
 
-      ![ollama-list](screenshots/21.png)
+Check they are installed:
 
----
+```bash
+docker --version
+kubectl version --client
+kind version
+```
 
-### Phase 2: Security and Identity Configuration
+### 2. Create A Local Kubernetes Cluster
 
-The deployment pipeline utilizes OpenID Connect (OIDC) for secure, keyless authentication between GitHub and AWS.
+```bash
+kind create cluster --config setup-k8s/kind-config.yml
+```
 
-1. **IAM Identity Provider**:
-   - Provider URL: `https://token.actions.githubusercontent.com`
-   - Audience: `sts.amazonaws.com`
+### 3. Deploy BankApp, MySQL, And Ollama
 
-      ![identity-provider](screenshots/10.png)
+```bash
+kubectl apply -f k8s/namespace.yml
+kubectl apply -f k8s/persistancevolume.yml
+kubectl apply -f k8s/secret.yml
+kubectl apply -f k8s/configmap.yml
+kubectl apply -f k8s/pvc.yml
+kubectl apply -f k8s/ollama-pvc.yml
+kubectl apply -f k8s/mysql-deployment.yml
+kubectl apply -f k8s/ollama-deployment.yml
+kubectl apply -f k8s/service.yml
+kubectl apply -f k8s/ollama-service.yml
+kubectl apply -f k8s/bankapp-deployment.yml
+```
 
-2. **Deployment Role**:
-   - Click on created `Identity provider`
-   - Asign & Create a role named `GitHubActionsRole`.
-   - Enter following details:
-      - `Identity provider`: Select created one.
-      - `Audience`: Select created one.
-      - `GitHub organization`: Your GitHub Username or Orgs Name where this repo is located.
-      - `GitHub repository`: Write the Repository name of this project. `(e.g, DevSecOps-Bankapp)`
-      - `GitHub branch`: branch to use for this project `(e.g, devsecops)`
-      - Click on `Next`
+Optional autoscaling:
 
-      ![role](screenshots/11.png)
+```bash
+kubectl apply -f k8s/horizontal_pod_autoscaler.yml
+```
 
-   - Assign `AmazonEC2ContainerRegistryPowerUser` permissions.
+### 4. Wait Until Everything Is Ready
 
-      ![iam permission](screenshots/12.png)
+```bash
+kubectl get pods -n bankapp
+```
 
-   - Click on `Next`, Enter name of role and click on `Create role`.
+Wait until the pods show `Running`. Ollama can take extra time because it downloads the `tinyllama` model inside the cluster.
 
-      ![iam role](screenshots/13.png)
+### 5. Open The App
 
----
+Open this in your browser:
 
-### Phase 3: Secrets and Pipeline Configuration
+```text
+http://localhost:8080/register
+```
 
-#### 1. AWS Secrets Manager
-Create a secret named `bankapp/prod-secrets` in `Other type of secret` with the following key-value pairs:
+The Kind config maps your laptop port `8080` to the Kubernetes BankApp service.
 
-| Secret Key | Description | Sample/Default Value |
-| :--- | :--- | :--- |
-| `DB_HOST` | The MySQL container service name | `db` |
-| `DB_PORT` | The database port | `3306` |
-| `DB_NAME` | The application database name | `bankappdb` |
-| `DB_USER` | The database username | `bankuser` |
-| `DB_PASSWORD` | The database password | `Test@123` |
-| `OLLAMA_URL` | The private URL for the AI tier | `http://<PRIVATE-IP>:11434` |
+### 6. Delete The Kubernetes Setup
 
-![aws-ssm](screenshots/14.png)
+```bash
+kind delete cluster --name tws-cluster
+```
 
-#### 2. GitHub Repository Secrets
-Configure the following Action Secrets within your GitHub repository settings:
+## Run Without Docker
 
-| Secret Name | Description |
-| :--- | :--- |
-| `AWS_ROLE_ARN` | The ARN of the `GitHubActionsRole` |
-| `AWS_REGION` | The AWS region where resources are deployed |
-| `AWS_ACCOUNT_ID` | Your 12-digit AWS account number |
-| `ECR_REPOSITORY` | The name of the ECR repository (`devsecops-bankapp`) |
-| `EC2_HOST` | The public IP address of the Application EC2 |
-| `EC2_USER` | The SSH username (default is `ubuntu`) |
-| `EC2_SSH_KEY` | The content of your private SSH key (`.pem` file) |
-| `NVD_API_KEY` | Free API key from [nvd.nist.gov](https://nvd.nist.gov/developers/request-an-api-key) for OWASP SCA scans |
+This is mainly for developers.
 
-> **Note**: The `NVD_API_KEY` raises the NVD API rate limit from ~5 requests/30s to 50 requests/30s, reducing the OWASP Dependency Check scan time from 30+ minutes to under 8 minutes. Without it the SCA job will time out.
+You need:
 
-#### Obtaining the NVD API Key
+- Java 21
+- MySQL 8
+- Ollama
+- tinyllama model
 
-**Step 1: Request the API Key**
-- Go to [https://nvd.nist.gov/developers/request-an-api-key](https://nvd.nist.gov/developers/request-an-api-key).
-- Enter your `Organzation name`, `email address`, and select `organization type`.
-- Accept **Terms of Use** and Click **Submit**.
+Start MySQL and Ollama first, then run:
 
-   ![request](screenshots/22.png)
+```bash
+ollama pull tinyllama
+./mvnw spring-boot:run
+```
 
-**Step 2: Activate the API Key**
-- Check your email inbox for a message from `nvd-noreply@nist.gov`.
+Then open:
 
-   ![email](screenshots/25.png)
+```text
+http://localhost:8080/register
+```
 
-- Click the **activation link** in the email.
-- Enter `UUID` provided in email and Enter `Email` to activate
-- The link confirms your key and marks it as active.  
+## Important Settings
 
-   ![api-activate](screenshots/23.png)
+The app reads these settings from environment variables:
 
-**Step 3: Get the API Key**
-- After clicking the activation link, the page will generate your API key.
-- Copy and save it securely.
+| Setting | What it means | Default value |
+| --- | --- | --- |
+| `MYSQL_HOST` | MySQL server name | `localhost` |
+| `MYSQL_PORT` | MySQL port | `3306` |
+| `MYSQL_DATABASE` | Database name | `bankappdb` |
+| `MYSQL_USER` | Database user | `root` |
+| `MYSQL_PASSWORD` | Database password | `Test@123` |
+| `OLLAMA_URL` | Ollama server URL | `http://localhost:11434` |
 
-   ![api-key](screenshots/24.png)
+For Docker, these are already set in `docker-compose.yml`.
 
-**Step 4: Add as GitHub Secret**
-- Go to your repository on GitHub.
-- Navigate to **Settings** → **Secrets and variables** → **Actions** → **New repository secret**.
-- Name: `NVD_API_KEY`
-- Value: Paste the copied API key.
-- Click **Add Secret**.
+For Kubernetes, these are set in:
 
-![github-secret](screenshots/15.png)
+- `k8s/configmap.yml`
+- `k8s/secret.yml`
 
----
+## Useful Commands
 
-## Continuous Integration and Deployment
+See Docker containers:
 
-The DevSecOps lifecycle is orchestrated through the [DevSecOps Main Pipeline](.github/workflows/devsecops-main.yml), which securely sequences three modular workflows: [CI](.github/workflows/ci.yml), [Build](.github/workflows/build.yml), and [CD](.github/workflows/cd.yml). Together they enforce **9 sequential security gates** before any code reaches production. Every `git push` to the `main` or `devsecops` branch triggers the full pipeline automatically.
+```bash
+docker compose ps
+```
 
-| Gate | Job | Tool | Action |
-| :---: | :--- | :--- | :--- |
-| 1 | `gitleaks` | Gitleaks | **Strict**: Fails if any secrets are found in history. |
-| 2 | `lint` | Checkstyle | **Audit**: Reports style violations but doesn't block (Google Style). |
-| 3 | `sast` | Semgrep | **Strict**: Scans code for vulnerabilities. Fails on findings. |
-| 4 | `sca` | OWASP Dependency Check | **Strict**: Fails if any dependency has CVSS > 7.0. |
-| 5 | `build` | Maven | Standard build and test stage. |
-| 6 | `image_scan` | Trivy | **Strict**: Scans Docker image layers. Fails on any High/Critical CVE. |
-| 7 | `push_to_ecr` | Amazon ECR | Pushes the verified image to AWS ECR using OIDC. |
-| 8 | `deploy` | SSH / Docker Compose | Fetches secrets from AWS Secrets Manager and recreates the container. |
-| 9 | `dast` | OWASP ZAP | **Audit Mode**: Comprehensive scan that reports findings as artifacts, but does not block the pipeline. |
+See app logs:
 
-All scan reports (OWASP, Trivy, ZAP) are uploaded as downloadable **Artifacts** in each GitHub Actions run, YOu can look into the **Artifacts**.
+```bash
+docker compose logs -f bankapp
+```
 
-- CI/CD
+See Ollama models:
 
-   ![github-actions](screenshots/16.png)
+```bash
+docker compose exec ollama ollama list
+```
 
-- Artifacts
+See Kubernetes pods:
 
-   ![artifacts](screenshots/26.png)
-   
----
+```bash
+kubectl get pods -n bankapp
+```
 
-## Operational Verification
+See Kubernetes app logs:
 
-- **Process Status**: `docker ps`
+```bash
+kubectl logs -n bankapp deployment/bankapp-deployment
+```
 
-  ![docker ps](screenshots/19.png)
+## Common Problems
 
-- **Application Working**:
+### The website does not open
 
-  ![app](screenshots/20.png)
+Make sure the app is running:
 
-- **Database Connectivity**: 
+```bash
+docker compose ps
+```
 
-  ```bash
-  docker exec -it db mysql -u <USER> -p bankappdb -e "SELECT * FROM accounts;"
-  ```
+Then open:
 
-  ![mysql-result](screenshots/17.png)
+```text
+http://localhost:8080/register
+```
 
-  > **ZAP** is automatically created by **DAST - OWASP ZAP Baseline Scan** job in [cd.yml](.github/workflows/cd.yml). Read more about it(How, Why it does) on google...
+### The AI assistant says it is unavailable
 
-- **Network Validation**: 
+Make sure Ollama is running and the model exists:
 
-  ```bash
-  nc -zv <OLLAMA-PRIVATE-IP> 11434
-  ```
+```bash
+docker compose exec ollama ollama list
+```
 
-  ![ollama-success](screenshots/18.png)
+If `tinyllama` is missing, run:
 
----
+```bash
+docker compose exec ollama ollama pull tinyllama
+```
 
-<div align="center">
+### Port 8080 is already used
 
-Happy Learning
+Another app is already using port `8080`. Stop that app, or change the left side of this line in `docker-compose.yml`:
 
-**TrainWithShubham**  
+```yaml
+ports:
+  - "8080:8080"
+```
 
-</div>
+For example, use `8081:8080`, then open `http://localhost:8081/register`.
+
+## Project Files
+
+| File or folder | Purpose |
+| --- | --- |
+| `src/main/java` | Java source code |
+| `src/main/resources/templates` | Web pages |
+| `src/main/resources/static` | CSS, JavaScript, and static files |
+| `Dockerfile` | Builds the BankApp container |
+| `docker-compose.yml` | Starts BankApp, MySQL, and Ollama with Docker |
+| `k8s/` | Kubernetes setup files |
+| `setup-k8s/kind-config.yml` | Local Kind cluster setup |
+| `scripts/ollama-setup.sh` | Ollama setup script for a server |
+

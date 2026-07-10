@@ -49,8 +49,6 @@
 # volumes:
 #   mysql-data:
 
-version: "3.9"
-
 services:
   mysql:
     image: mysql:8.0
@@ -72,7 +70,7 @@ services:
       - bankapp-new
 
   bankapp:
-    build: avnish2/ai-bankapp:latest
+    image: avnish2/ai-bankapp:latest
     container_name: bankapp
     ports:
       - "8080:8080"
